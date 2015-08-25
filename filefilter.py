@@ -63,6 +63,8 @@ class FilterChain():
     def __init__(self, workdir, filters):
         self.workdir = workdir
         self.filters = filters
+        self.process_file_hook = list()
+        self.call_filter_hook = list()
 
     def __open_outstream(self, filepath, filterpath):
         prefix = "{0}_{1}_".format(
@@ -86,6 +88,12 @@ class FilterChain():
                 filepath, currentfilter.filterpath
             )
 
+            list(map(lambda f: f(filepath,
+                                 filestream,
+                                 currentfilter,
+                                 outstream),
+                     self.call_filter_hook))
+
             currentfilter(instream, outstream)
 
             if n > 0:
@@ -101,6 +109,10 @@ class FilterChain():
         laststream = None
 
         with open(filepath, mode='r+b') as filestream:
+            list(map(lambda f: f(filepath,
+                                 filestream),
+                     self.process_file_hook))
+
             laststream = self.streamfilter(filepath, filestream)
             filestream.seek(0)
             filestream.truncate()
@@ -125,7 +137,12 @@ def build_argparser():
         "--workdir",
         help='set working directory (override FF_WORKDIR)'
     )
-
+    parser.add_argument(
+        "-p", "--show-progress",
+        dest='showprogress',
+        action='store_true',
+        help='show progress message'
+    )
     return parser
 
 
@@ -153,6 +170,20 @@ def build_filterchain(workdir, caller, filterpaths):
 
     return FilterChain(workdir, filters)
 
+
+def progress_file(filepath, filestream):
+    if progress_file.n > 0:
+        print('', file=sys.stderr)
+
+    progress_file.n += 1
+    print("{0}:".format(filepath), end='', file=sys.stderr)
+
+
+def progress_filter(filepath, filestream, currentfilter, outstream):
+    msg = " {0}".format(Path(currentfilter.filterpath).name)
+    print(msg, end='', file=sys.stderr)
+
+
 if __name__ == '__main__':
     parser = build_argparser()
 
@@ -171,12 +202,23 @@ if __name__ == '__main__':
     workdir = build_workdir(worktopdir)
     filterchain = build_filterchain(workdir, caller, filterpaths)
 
+    if args.showprogress:
+        progress_file.n = 0
+        filterchain.process_file_hook.append(progress_file)
+        filterchain.call_filter_hook.append(progress_filter)
+
     if filepaths and len(filepaths) > 0:
         for filepath in filepaths:
             filterchain.filefilter(filepath)
     else:
+        if args.showprogress:
+            print('stdin:', end='', file=sys.stderr)
+
         laststream = filterchain.streamfilter('STDIN', sys.stdin.buffer)
         shutil.copyfileobj(laststream, sys.stdout.buffer)
         laststream.close()
+
+    if args.showprogress:
+        print('', file=sys.stderr)
 
     shutil.rmtree(workdir)
