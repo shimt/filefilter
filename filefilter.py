@@ -27,6 +27,15 @@ class FilterException(Exception):
     pass
 
 
+class FilterProcessException(FilterException):
+
+    def __init__(self, filter_, returncode=None, stderr=None, exception=None):
+        self.filter = filter_
+        self.returncode = returncode
+        self.stderr = stderr
+        self.exception = exception
+
+
 class FilterProcess():
 
     def __init__(self, caller, filterpath):
@@ -39,18 +48,33 @@ class FilterProcess():
             args.append(self.caller)
         args.append(self.filterpath)
 
-        process = subprocess.Popen(
-            args,
-            stdin=instream,
-            stdout=outstream,
-            shell=False,
-            universal_newlines=False,
-        )
+        try:
+            process = subprocess.Popen(
+                args,
+                stdin=instream,
+                stdout=outstream,
+                stderr=subprocess.PIPE,
+                shell=False,
+                universal_newlines=False,
+            )
+        except FileNotFoundError as e:
+            raise FilterProcessException(self, exception=e) from e
 
-        process.wait()
+        (stdout_, stderr_) = process.communicate()
 
         if process.returncode != 0:
-            raise FilterException(process.returncode)
+            raise FilterProcessException(
+                self,
+                returncode=process.returncode,
+                stderr=stderr_)
+
+        if stdout_:
+            sys.stdout.flush()
+            sys.stdout.buffer.write(stdout_)
+
+        if stderr_:
+            sys.stderr.flush()
+            sys.stderr.buffer.write(stderr_)
 
     # Special method
 
@@ -184,7 +208,7 @@ def progress_filter(filepath, filestream, currentfilter, outstream):
     print(msg, end='', file=sys.stderr)
 
 
-if __name__ == '__main__':
+def main():
     parser = build_argparser()
 
     args = parser.parse_args()
@@ -222,3 +246,21 @@ if __name__ == '__main__':
         print('', file=sys.stderr)
 
     shutil.rmtree(workdir)
+
+if __name__ == '__main__':
+    r = 0
+
+    try:
+        main()
+    except FilterException as e:
+        if e.returncode is not None:
+            print('\nFilter Error: exit {0}'.format(e.returncode),
+                  file=sys.stderr)
+            sys.stderr.flush()
+            sys.stderr.buffer.write(e.stderr)
+            r = e.returncode
+        elif e.exception is not None:
+            print('\nFilter Error: {0}'.format(e.exception.args[1]),
+                  file=sys.stderr)
+
+    sys.exit(r)
