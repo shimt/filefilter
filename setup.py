@@ -18,7 +18,7 @@ setup_kwargs = dict(
 if platform.system() == 'Windows':
     import py2exe
 
-    setup_kwargs.extend(dict(
+    setup_kwargs.update(dict(
         options={
             "py2exe": {
                 "bundle_files": 1,
