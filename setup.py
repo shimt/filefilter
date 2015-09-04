@@ -11,7 +11,7 @@ setup_kwargs = dict(
     description='File Filtering Tool',
     author='Shinichi MOTOKI',
     author_email='shinichi-motoki@overruns.org',
-    url='http://gitlab.overruns.org/shinichi-motoki/filefilter',
+    url='https://github.com/shinichi-motoki/filefilter',
     scripts=['filefilter.py'],
 )
 
